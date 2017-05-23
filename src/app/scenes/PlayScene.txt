@@ -1,0 +1,663 @@
+ --
+-- Author: lcl
+-- Date: 2015- 12- 24 14: 23: 19
+--
+
+Bomb = import("app.scenes.Bomb")
+Toast = import("app.scenes.Toast")
+
+local PlayScene = class("PlayScene", function()
+    return display.newScene("PlayScene")
+    end)
+
+function PlayScene:initUI()
+    cc.ui.UILabel.new({
+        UILabelType = 2, text = "BestScore:", font="fonts/STENCILSTD.OTF",size = 38})
+        :align(display.LEFT_TOP, display.left+10, display.top-30)
+        :addTo(self) 
+    self.highScoreLabel = cc.ui.UILabel.new({
+        UILabelType = 2, text = tostring(self.highScore), font="fonts/STENCILSTD.OTF",size = 38})
+        :align(display.LEFT_TOP, display.left+305, display.top-30)
+        :addTo(self)
+    cc.ui.UILabel.new({
+        UILabelType = 2, text = "Score:", font="fonts/STENCILSTD.OTF",size = 38})
+        :align(display.LEFT_TOP, display.left+10, display.top-80)
+        :addTo(self)
+    self.curScoreLabel = cc.ui.UILabel.new({
+        UILabelType = 2, text = "0", font="fonts/STENCILSTD.OTF",size = 38})
+        :align(display.LEFT_TOP, display.left+180, display.top-80)
+        :addTo(self)
+    self.activeScoreLabel = display.newTTFLabel({text = "",size =30})
+        :pos(display.width/2,120)
+        :addTo(self)
+    self.activeScoreLabel:setColor(display.COLOR_WHITE)
+
+    --    local sliderImages = {
+    --        bar = "Slider.png",
+    --        button = "push.png"
+    --    }
+    --    self.sliderBar = cc.ui.UISlider.new(display.LEFT_TO_RIGHT,sliderImages,{scale9 =true})
+    --        :setSliderSize(display.width,100)
+    --        :setSliderValue(2.5)
+    --        :align(display.LEFT_BOTTOM,0,0)
+    --        :addTo(self)
+    --    self.sliderBar:setTouchEnabled(false)
+    
+    local slider_blank = cc.Sprite:create("Slider_blank.png"):addTo(self)
+    slider_blank:setPosition(0,0)
+    slider_blank:setAnchorPoint(0,0)
+    slider_blank:setScale(display.width/slider_blank:getContentSize().width,1)
+
+    local slider = cc.Sprite:create("Slider_full.png")
+    self.ct = cc.ProgressTimer:create(slider)
+    self.ct:setPosition(0,0)
+    self.ct:setAnchorPoint(0,0)
+    self.ct:setType(cc.PROGRESS_TIMER_TYPE_BAR)
+    self.ct:setTag(10)
+    self.ct:setScale(display.width/slider:getContentSize().width,1)
+    self.ct:addTo(self)
+    self.ct:setPercentage(0)
+    self.ct:setMidpoint(cc.p(0,0.5))
+    self.ct:setBarChangeRate(cc.p(1,0))
+    
+    self.percentageLable = cc.ui.UILabel.new({
+        UILabelType = 2, text = "0%", font="fonts/STENCILSTD.OTF",size = 38})
+        :align(display.CENTER_BOTTOM, display.cx, 15)
+        :addTo(self)
+        
+    local startBtnImages = {
+        normal = "startgame_up.png",
+        pressed = "startgame_down.png"
+    }
+    cc.ui.UIPushButton.new(startBtnImages,{scale9 = false})
+        :onButtonClicked(function(event)
+            local PlayScene = require("src/app/scenes/MainScene")
+            playScene = PlayScene:new()
+            local ts = cc.TransitionFadeDown:create(1,playScene)
+            cc.Director:getInstance():replaceScene(ts)
+        end)
+        :align(display.TOP_RIGHT,display.width,display.height-20)
+        :addTo(self)
+end
+
+function PlayScene:ctor()
+
+    math.randomseed(os.time())
+    display.addSpriteFrames("bomb/bomb.plist","bomb/bomb.png")
+    local bg = cc.Sprite:create("grey.png"):center()
+    bg:setScale(size.width/bg:getTextureRect().width,size.height/bg:getTextureRect().height)
+    bg:addTo(self)
+     
+    self.layer = cc.Layer:create()
+    self.layer:addTo(self)
+    self.layer:setTouchCaptureEnabled(false)
+     
+    self.scoreStart = 5
+    self.scoreStep = 10
+    self.activeScore = 0
+     
+    self.highScore = 0
+    self.stage = 1
+    self.target = 123
+    self.curScore = 0
+
+    self.xCount = 9
+    self.yCount = 10
+    self.bombGap = 0
+    
+    self.bombWidth = cc.Director:getInstance():getWinSize().width/self.xCount
+    self.bombHeight = self.bombWidth
+    self.bombWidthScale = self.bombWidth/Bomb:getWidth()
+    self.bombHeightScale = self.bombWidthScale
+
+    self.start_x = nil
+    self.start_y = nil
+    self.end_x = nil
+    self.end_y = nil
+
+    self.actionTime = 0.15
+    self.matrixLBX = (display.width - self.bombWidth*self.xCount -(self.yCount -1 )*self.bombGap)/2
+    self.matrixLBY = (display.height - self.bombWidth*self.yCount -(self.xCount -1 )*self.bombGap)/2
+
+    self:addNodeEventListener(cc.NODE_EVENT, function(event)
+        if event =="enterTransitionFinish" then
+            self:initMatrix()
+        end
+    end)
+
+    self.highScore = cc.UserDefault:getInstance():getIntegerForKey("HighScore")
+    self.stage =cc.UserDefault:getInstance():getIntegerForKey("Stage")
+    if self.stage == 0  then
+        self.stage = 1    	
+    end
+    self.target = self.stage * 200
+
+    self:initUI()
+end
+
+function PlayScene:initMatrix()
+    self.matrix={}
+    self.actives={}
+    for y=1, self.yCount do
+        for x=1,self.xCount do
+            if self.yCount  == y and self.xCount ==x then
+                self:createAndDropBomb(x,y,nil,true)
+            else
+                self:createAndDropBomb(x,y)
+            end
+        end
+    end
+end
+
+function PlayScene:createAndDropBomb(x,y,bombIndex,last)
+    local newBomb = Bomb.new(x,y,bombIndex)
+    local endPosition =self:positionOfBomb(x,y)
+    local startPosition = cc.p(endPosition.x,endPosition.y+display.height/2)
+    newBomb:setScale(self.bombWidthScale,self.bombWidthScale)
+    newBomb:setPosition(startPosition)
+    local speed = startPosition.y/(2*display.height)
+
+    newBomb:runAction(cc.Sequence:create(cc.EaseSineIn:create(cc.MoveTo:create(speed,endPosition)),cc.CallFunc:create(function ()
+    if last then
+        self:flush(true)
+        last = false
+    end
+    end)))
+
+    self.matrix[(y-1)*self.xCount + x]=newBomb
+    self.layer:addChild(newBomb)
+
+    newBomb:setTouchEnabled(true)
+    newBomb:addNodeEventListener(cc.NODE_TOUCH_EVENT,function(event)
+        if event.name == "began" then
+            self.start_x = event.x
+            self.start_y = event.y
+
+            self:inactive()
+            newBomb:setActive(true,self.bombWidthScale,self.bombWidthScale)
+            table.insert(self.actives,newBomb)
+            return true
+        end
+
+        if event.name == "moved" then
+        end
+
+        if event.name == "ended" then
+            self.layer:setTouchCaptureEnabled(false)
+            if not self:moveBomb(newBomb,event) then
+                self.layer:setTouchCaptureEnabled(true)
+            end
+        end
+
+    end)
+end
+
+function PlayScene:flush(Touchable)
+    self:inactive()
+    if not self:checkAll() then
+        if Touchable then
+            self.layer:setTouchCaptureEnabled(true)
+        end
+        return 
+    end   
+    self:cleanAll()
+    self:showActivesScore()
+    self:removeActivedBombs()
+    self:dropBombs()
+    self:checkNextStage()
+end
+
+function PlayScene:checkAll()
+    local needClean = false
+    for y=1, self.yCount do
+        for x=1, self.xCount do
+            if (x <= self.xCount - 2 ) then
+                local x_1 = self.matrix[(y-1)*self.xCount + x]
+                local x_2 = self.matrix[(y-1)*self.xCount + x + 1]
+                local x_3 = self.matrix[(y-1)*self.xCount + x + 2]
+                if (x_1 ~= nil) 
+                    and (x_1.bombIndex == x_2.bombIndex) 
+                    and (x_1.bombIndex == x_3.bombIndex) then
+                    x_1:setActive(true,self.bombWidthScale,self.bombWidthScale)
+                    x_2:setActive(true,self.bombWidthScale,self.bombWidthScale)
+                    x_3:setActive(true,self.bombWidthScale,self.bombWidthScale)
+                    needClean = true
+                end
+            end
+            if (y <= self.yCount - 2 ) then
+                local y_1 = self.matrix[(y-1)*self.xCount + x]
+                local y_2 = self.matrix[(y)*self.xCount + x]
+                local y_3 = self.matrix[(y+1)*self.xCount + x]
+                if (y_1 ~= nil) 
+                    and (y_1.bombIndex == y_2.bombIndex) 
+                    and (y_1.bombIndex == y_3.bombIndex) then
+                    y_1:setActive(true,self.bombWidthScale,self.bombWidthScale)
+                    y_2:setActive(true,self.bombWidthScale,self.bombWidthScale)
+                    y_3:setActive(true,self.bombWidthScale,self.bombWidthScale)
+                    needClean = true
+                end
+            end
+            if self.matrix[(y-1)*self.xCount + x].state ~= -1 then
+                print(x.."--"..y.."--"..self.matrix[(y-1)*self.xCount + x].state)
+                self.matrix[(y-1)*self.xCount + x]:setActive(false,self.bombWidthScale,self.bombWidthScale)
+            end
+        end
+    end
+    return needClean
+end
+
+function PlayScene:cleanAll()
+    for y=1, self.yCount do
+        for x=1, self.xCount do
+            if (self.matrix[(y-1)*self.xCount + x].isActive) then
+                --print(x.."--"..y)
+            	table.insert(self.actives,self.matrix[(y-1)*self.xCount + x])
+            end
+        end
+    end
+end
+
+function PlayScene:positionOfBomb(x,y)
+    local px = self.matrixLBX +(self.bombWidth+self.bombGap)* (x-1)+self.bombWidth/2
+    local py = self.matrixLBY +(self.bombWidth+self.bombGap)* (y-1)+self.bombWidth/2
+    return cc.p(px,py)
+end
+
+function PlayScene:removeActivedBombs()
+    local bombScore = self.scoreStart
+    for _,bomb  in pairs(self.actives) do
+    	if bomb then
+    		self.matrix[(bomb.y-1)*self.xCount + bomb.x] = nil
+    		
+    		--下面这段粒子效果
+    		local emitter = cc.ParticleSystemQuad:create("stars.plist")
+    		emitter:setPosition(bomb:getPosition())
+            emitter:setAutoRemoveOnFinish(true)
+            local batch = cc.ParticleBatchNode:createWithTexture(emitter:getTexture())
+            batch:addChild(emitter)
+    		self:addChild(batch)
+    		--
+    		
+    		bombScore = bombScore + self.scoreStep
+    		
+    		self:scorePopupEffect(bombScore,bomb:getPosition())
+    		
+    		bomb:removeFromParent()
+    	end
+    end
+    self.actives = {}
+    self.curScore = self.curScore +self.activeScore
+    self.curScoreLabel:setString(tostring(self.curScore))	
+    self.activeScoreLabel:setString("")
+    self.activeScore = 0
+    
+    local sliderValue = self.curScore*100/self.target
+    if sliderValue <0 then
+        sliderValue = 0
+    elseif sliderValue >100 then
+        sliderValue = 100
+    end
+ --    self.sliderBar:setSliderValue(sliderValue)
+    self.ct:setPercentage(sliderValue)
+    self.percentageLable:setString(string.format("%d%%",sliderValue))
+end
+
+function PlayScene:scorePopupEffect(bombScore,x,y)
+    local toast = Toast.new()
+    toast:setPosition(x,y)
+    toast:addToast(string.format("%d",bombScore),2)
+    self:addChild(toast)
+ --    toast:runAction(cc.MoveBy:create(2,cc.p(0,self.bombWidth)))
+ --    toast:runAction(cc.Spawn:create(cc.FadeOut:create(2),cc.MoveBy:create(2,cc.p(0,self.bombWidth))))
+    local allAction = {cc.EaseSineOut:create(cc.Spawn:create(cc.FadeOut:create(1),cc.MoveBy:create(1,cc.p(0,self.bombWidth)))),
+        cc.CallFunc:create(function ()
+            toast:removeFromParent(true)
+        end)}
+    toast:runAction(cc.Sequence:create(allAction))
+ --    toast:setScheduler(Toast:removeSelf(toast),self,2,true)
+end
+
+function PlayScene:dropBombs()
+    local all_remove = 0
+    
+    self.layer:setTouchCaptureEnabled(false)
+
+    local emptyInfo={}
+    for x= 1, self.xCount do
+    	local removedBombs = 0
+    	local newY = 0
+    	for y = 1,self.yCount do
+    		local temp = self.matrix[(y-1)*self.xCount + x]
+    		if temp ==nil then                
+                removedBombs = removedBombs + 1
+                all_remove = all_remove + 1
+            else
+                if removedBombs>0 then
+                    newY = y - removedBombs
+                    self.matrix[(newY-1)*self.xCount +x ] = temp
+                    temp.y =newY
+                    self.matrix[(y-1)*self.xCount +x ]= nil
+
+    		    	local endPosition = self:positionOfBomb(x,newY)
+    		    	local speed = (temp:getPositionY()-endPosition.y)/display.height
+    		    	temp:stopAllActions()
+    		    	temp:runAction(cc.Spawn:create(cc.DelayTime:create(self.actionTime+0.05),cc.EaseExponentialIn:create(cc.MoveTo:create(speed,endPosition))))
+    		    	
+    		    end
+    		end
+    	end
+    		emptyInfo[x] = removedBombs
+    end
+    
+	for x=1,self.xCount do
+	   for y=self.yCount - emptyInfo[x] + 1,self.yCount do
+	       all_remove = all_remove - 1
+	       if all_remove == 0 then
+    	   	   self:createAndDropBomb(x,y,nil,true)
+    	   else
+    	   	   self:createAndDropBomb(x,y)
+	       end
+	   end
+	end
+end
+
+function PlayScene:checkNextStage()
+	if self.curScore<self.target then
+		return
+	end
+	
+	local resultLayer = display.newColorLayer(cc.c4b(0,50,0,150))
+	resultLayer:addTo(self)
+	resultLayer:setTouchEnabled(true)
+	resultLayer:addNodeEventListener(cc.NODE_TOUCH_EVENT,function(event)
+	   if event.name =="began" then
+	   	   return true
+	   end
+	end)
+	
+	if self.curScore>=self.highScore then
+        self.highScore =self.curScore
+    end
+
+    self.stage = self.stage + 1
+    self.target = self.stage * 200
+	cc.UserDefault:getInstance():setIntegerForKey("HighScore",self.highScore)
+	cc.UserDefault:getInstance():setIntegerForKey("Stage",self.stage)
+	
+	display.newTTFLabel({text = string.format("恭喜过关！\n最高分：%d",self.highScore),size = 60})
+	   :pos(display.cx,display.cy+140)
+	   :addTo(resultLayer)
+	
+	local startBtnImages = {
+	   normal = "startgame_up.png",
+	   pressed = "startgame_down.png"
+	}
+	cc.ui.UIPushButton.new(startBtnImages,{scale9 = false})
+	   :onButtonClicked(function(event)
+	       local mainScene = import("app.scenes.MainScene"):new()
+           display.replaceScene(mainScene,"SlideInL",0.5)
+	   end)
+	   :align(display.CENTER,display.cx,display.cy -80)
+	   :addTo(resultLayer)
+end
+
+function PlayScene:inactive()
+	for _,bomb in pairs(self.actives) do
+	   if(bomb) then
+            bomb:setActive(false,self.bombWidthScale,self.bombWidthScale)
+	   end
+	end
+	self.actives={}
+end
+
+function PlayScene:acitveNeighbor(bomb,hor,ver,dir)
+    -- if false == bomb.isActive then
+    --     bomb:setActive(true,self.bombWidthScale,self.bombWidthScale)
+    --     table.insert(self.actives,bomb)
+    -- end
+    print("i do bitch")
+    if ((bomb.x - 1) >= 1) and ((dir == 1) or (dir == -1)) then
+        local leftNeighbor = self.matrix[(bomb.y -1 )*self.xCount + bomb.x-1]
+        if (leftNeighbor.isActive == false)and(leftNeighbor.bombIndex == bomb.bombIndex) then
+            -- leftNeighbor:setActive(true,self.bombWidthScale,self.bombWidthScale)
+            -- table.insert(self.actives,leftNeighbor)
+            hor = hor + 1
+            
+            self:acitveNeighbor(leftNeighbor,hor,ver,1)
+            
+            return ture
+            print("hor--1")
+        end
+    end 
+    if ((bomb.x + 1) <= self.xCount) and ((dir == 2) or (dir == -1)) then
+        local rightNeighbor = self.matrix[(bomb.y -1 )*self.xCount + bomb.x+1]
+        if (rightNeighbor.isActive == false)and(rightNeighbor.bombIndex == bomb.bombIndex) then
+            -- rightNeighbor:setActive(true,self.bombWidthScale,self.bombWidthScale)
+            -- table.insert(self.actives,rightNeighbor)
+            hor = hor + 1
+            
+            self:acitveNeighbor(rightNeighbor,hor,ver,2)
+            
+            return ture
+            print("hor--2")
+        end
+    end 
+    if ((bomb.y + 1) <= self.yCount) and ((dir == 3) or (dir == -1)) then
+        local upNeighbor = self.matrix[(bomb.y )*self.xCount + bomb.x]
+        if (upNeighbor.isActive == false)and(upNeighbor.bombIndex == bomb.bombIndex) then
+            -- upNeighbor:setActive(true,self.bombWidthScale,self.bombWidthScale)
+            -- table.insert(self.actives,upNeighbor)
+            ver = ver + 1
+            
+            self:acitveNeighbor(upNeighbor,hor,ver,3)
+            
+            return ture
+            print("ver--3")
+        end
+    end 
+    if ((bomb.y - 1) >= 1) and ((dir == 4) or (dir == -1)) then
+        local downNeighbor = self.matrix[(bomb.y -2 )*self.xCount + bomb.x]
+        if (downNeighbor.isActive == false)and(downNeighbor.bombIndex == bomb.bombIndex) then
+            -- downNeighbor:setActive(true,self.bombWidthScale,self.bombWidthScale)
+            -- table.insert(self.actives,downNeighbor)
+            ver = ver + 1
+            
+            self:acitveNeighbor(downNeighbor,hor,ver,4)
+            
+            return ture
+            print("ver--4")
+        end
+    end
+    if dir == nil then
+        if ver >= 4 then
+            bomb:setState(3)
+            if ver >= 5 then
+                bomb:setState(0)
+            end
+        end
+        if hor >= 4 then
+            bomb:setState(4)
+            if hor >= 5 then
+                bomb:setState(0)
+            end
+        end
+        if bomb.state ~= 0 then 
+            if hor >= 3 and ver >= 3 then 
+                bomb:setState(0)
+            end 
+        end 
+    end
+end
+
+function PlayScene:showActivesScore()
+    if 1 == #self.actives then 
+        self:inactive()
+        self.activeScoreLabel:setString("")
+        self.activeSocre = 0
+        return
+    end
+    self.activeScore = (self.scoreStart * 2 +self.scoreStep * (#self.actives -1))* #self.actives/2
+    -- self.activeScoreLabel:setString(string.format("%d连消，得分%d",#self.actives,self.activeScore))
+end
+
+function PlayScene:moveBomb(bomb,event)
+    self.end_x = event.x
+    self.end_y = event.y
+    local move_x = self.end_x - self.start_x
+    local move_y = self.end_y - self.start_y
+
+    if math.abs(move_x) > math.abs(move_y) then
+        if move_x >= (self.bombWidth/2) then
+            self:acitveNeighbor(bomb,0,0,-1)
+            -- local bomb2 = self.matrix[(bomb.y - 1)*self.xCount + bomb.x + 1]
+            -- self:activeNeighbor(bomb2)
+            self:toRight(bomb,false)
+            return true
+        elseif move_x <= (self.bombWidth/-2) then
+            self:acitveNeighbor(bomb,0,0,-1)
+            -- local bomb2 = self.matrix[(bomb.y - 1)*self.xCount + bomb.x - 1]
+            -- self:activeNeighbor(bomb2)
+            self:toLeft(bomb,false)
+            return true
+        end
+    else
+        if move_y > (self.bombWidth/2)then
+            self:acitveNeighbor(bomb,0,0,-1)
+            -- local bomb2 = self.matrix[(bomb.y)*self.xCount + bomb.x]
+            -- self:activeNeighbor(bomb2)
+            self:toUp(bomb,false)
+            return true
+        elseif move_y < (self.bombWidth/-2) then
+            self:acitveNeighbor(bomb,0,0,-1)
+            -- local bomb2 = self.matrix[(bomb.y - 2)*self.xCount + bomb.x]
+            -- self:activeNeighbor(bomb2)
+            self:toDown(bomb,false)
+            return true
+        end
+    end
+    return false
+end
+
+function PlayScene:toRight(bomb,again)
+    local isChange = false
+
+    if bomb.x < self.xCount  then
+        local rightBomb = self.matrix[(bomb.y - 1)*self.xCount + bomb.x + 1]
+
+        bomb:runAction(cc.MoveTo:create(self.actionTime,self:positionOfBomb(rightBomb.x,bomb.y)))
+        rightBomb:runAction(cc.Sequence:create(cc.MoveTo:create(self.actionTime,self:positionOfBomb(bomb.x,bomb.y)),
+            cc.DelayTime:create(self.actionTime),cc.CallFunc:create(function ()
+                self.matrix[(bomb.y -1 )*self.xCount + bomb.x + 1] = bomb
+                self.matrix[(bomb.y -1 )*self.xCount + bomb.x] = rightBomb
+                bomb.x = bomb.x + 1
+                rightBomb.x = rightBomb.x -1
+                isChange = self:checkAll() 
+                self:flush(false)
+
+                if isChange == false and again == false then
+                    self:toLeft(bomb,true)
+                end
+                
+            end),cc.DelayTime:create(self.actionTime),cc.CallFunc:create(function ()
+                if again then
+                    self.layer:setTouchCaptureEnabled(true)
+                end
+            end)))
+    else
+        return false
+    end
+    return true
+end
+
+function PlayScene:toLeft(bomb,again)
+    local isChange = false
+    if bomb.x > 1  then
+        local leftBomb = self.matrix[(bomb.y - 1)*self.xCount + bomb.x - 1]
+
+        bomb:runAction(cc.MoveTo:create(self.actionTime,self:positionOfBomb(leftBomb.x,bomb.y)))
+        leftBomb:runAction(cc.Sequence:create(cc.MoveTo:create(self.actionTime,self:positionOfBomb(bomb.x,bomb.y)),
+            cc.DelayTime:create(self.actionTime),cc.CallFunc:create(function ()
+                self.matrix[(bomb.y -1 )*self.xCount + bomb.x - 1] = bomb
+                self.matrix[(bomb.y -1 )*self.xCount + bomb.x] = leftBomb
+                bomb.x = bomb.x - 1
+                leftBomb.x = leftBomb.x + 1
+                isChange = self:checkAll() 
+                self:flush(false)
+                if isChange == false and again == false then
+                    self:toRight(bomb,true)
+                end
+            end),cc.DelayTime:create(self.actionTime),cc.CallFunc:create(function ()
+                if again then
+                    self.layer:setTouchCaptureEnabled(true)
+                end
+            end)))
+    else
+        return false
+    end 
+end
+
+function PlayScene:toUp(bomb,again)
+    local isChange = false
+    if bomb.y < self.yCount  then
+        local upBomb = self.matrix[(bomb.y)*self.xCount + bomb.x]
+
+        bomb:runAction(cc.MoveTo:create(self.actionTime,self:positionOfBomb(upBomb.x,upBomb.y)))
+        upBomb:runAction(cc.Sequence:create(cc.MoveTo:create(self.actionTime,self:positionOfBomb(bomb.x,bomb.y)),
+            cc.DelayTime:create(self.actionTime),cc.CallFunc:create(function ()
+                self.matrix[(bomb.y)*self.xCount + bomb.x] = bomb
+                self.matrix[(bomb.y - 1)*self.xCount + bomb.x] = upBomb
+                bomb.y = bomb.y + 1
+                upBomb.y = upBomb.y - 1
+                isChange = self:checkAll() 
+                self:flush(false)
+                if isChange == false and again == false then
+                    self:toDown(bomb,true)
+                end
+            end),cc.DelayTime:create(self.actionTime),cc.CallFunc:create(function ()
+                if again then
+                    self.layer:setTouchCaptureEnabled(true)
+                end
+            end)))
+    else
+        return false
+    end 
+end
+
+function PlayScene:toDown(bomb,again)
+    local isChange = false
+    if bomb.y > 1 then
+        local downBomb = self.matrix[(bomb.y - 2)*self.xCount + bomb.x]
+
+        bomb:runAction(cc.MoveTo:create(self.actionTime,self:positionOfBomb(downBomb.x,downBomb.y)))
+        downBomb:runAction(cc.Sequence:create(cc.MoveTo:create(self.actionTime,self:positionOfBomb(bomb.x,bomb.y)),
+            cc.DelayTime:create(self.actionTime),cc.CallFunc:create(function ()
+                self.matrix[(bomb.y - 2)*self.xCount + bomb.x] = bomb
+                self.matrix[(bomb.y - 1)*self.xCount + bomb.x] = downBomb
+                bomb.y = bomb.y - 1
+                downBomb.y = downBomb.y + 1
+                isChange = self:checkAll() 
+                self:flush(false)
+                if isChange == false and again == false then
+                    self:toUp(bomb,true)
+                end
+            end),cc.DelayTime:create(self.actionTime),cc.CallFunc:create(function ()
+                if again then
+                    self.layer:setTouchCaptureEnabled(true)
+                end
+            end)))
+    else
+        return false
+    end 
+end
+
+function PlayScene:onEnterTransitionFinish()
+    self:initMatrix()
+end
+
+function PlayScene:onEnter()
+end
+
+function PlayScene:onExit()
+end
+
+return PlayScene

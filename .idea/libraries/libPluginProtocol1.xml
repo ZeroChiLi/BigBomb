@@ -1,0 +1,9 @@
+<component name="libraryTable">
+  <library name="libPluginProtocol1">
+    <CLASSES>
+      <root url="jar://$PROJECT_DIR$/frameworks/runtime-src/proj.android/protocols/android/libPluginProtocol.jar!/" />
+    </CLASSES>
+    <JAVADOC />
+    <SOURCES />
+  </library>
+</component>

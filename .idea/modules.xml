@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="ProjectModuleManager">
+    <modules>
+      <module fileurl="file://$PROJECT_DIR$/frameworks/cocos2d-x/cocos/platform/android/ControllerManualAdapter/ControllerManualAdapter.iml" filepath="$PROJECT_DIR$/frameworks/cocos2d-x/cocos/platform/android/ControllerManualAdapter/ControllerManualAdapter.iml" />
+      <module fileurl="file://$PROJECT_DIR$/frameworks/cocos2d-x/cocos/platform/android/java/android.iml" filepath="$PROJECT_DIR$/frameworks/cocos2d-x/cocos/platform/android/java/android.iml" />
+      <module fileurl="file://$PROJECT_DIR$/frameworks/runtime-src/proj.android/proj.android.iml" filepath="$PROJECT_DIR$/frameworks/runtime-src/proj.android/proj.android.iml" />
+      <module fileurl="file://$PROJECT_DIR$/frameworks/runtime-src/proj.android_no_anysdk/proj.android_no_anysdk.iml" filepath="$PROJECT_DIR$/frameworks/runtime-src/proj.android_no_anysdk/proj.android_no_anysdk.iml" />
+    </modules>
+  </component>
+</project>
